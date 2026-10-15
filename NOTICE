@@ -1,0 +1,26 @@
+GrokBot Codex Control Bridge
+Copyright (c) 2026 Aninvieve Labs
+Modifications copyright (c) 2026 the maintainers of this fork.
+
+This repository is a clean rewrite of the local MCP server from
+cos-codex-bridge, originally published by Aninvieve Labs (AV-Labs-Co):
+
+  https://github.com/AV-Labs-Co/cos-codex-bridge
+
+The original project is licensed under the MIT License. The license text
+is in the LICENSE file and must be retained.
+
+Ideas carried forward from that project:
+
+- a local stdio MCP process, with no hosted endpoint
+- realpath allowlists that reject the filesystem root and the home directory
+- private on-disk receipts written atomically with mode 0600
+- prompts passed to the coding agent on stdin rather than in argv
+- the rule that an accepted or queued receipt is not proof of completion
+
+The Codex session runner, git worktree isolation, auto-fix loop, tool
+schemas, and this documentation were written again for a Codex-only bridge.
+Routes for any coding agent other than the Codex CLI were not carried forward.
+
+This bridge does not deploy or publish. npm publish is disabled by
+"private": true, and the registry workflow always exits with an error.
