@@ -17,7 +17,7 @@ body:
     id: package
     attributes:
       label: Bridge version and installation method
-      placeholder: 0.1.4 from npm
+      placeholder: 0.3.0 from a git checkout
     validations:
       required: true
   - type: input

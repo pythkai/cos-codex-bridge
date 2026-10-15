@@ -1,183 +1,99 @@
-# CoS Codex Bridge
+# GrokBot Codex Control Bridge
 
-**Your Chief of Staff. Now in charge of Codex, too.**
+Local stdio MCP server that lets Grok Bot launch Codex CLI tasks, resume the same Codex thread, read bounded logs, run project tests, and stop when a ChatGPT usage limit is hit.
 
-![CoS Codex Bridge connects a Grok Bot Chief of Staff to Codex projects and tasks](docs/assets/cos-codex-bridge-hero.png)
+The Codex CLI is the only coding agent. Sign in with ChatGPT (`codex login`). An API key is optional and stays inside Codex. This process never deploys or publishes.
 
-[![CI](https://github.com/AV-Labs-Co/cos-codex-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/AV-Labs-Co/cos-codex-bridge/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/AV-Labs-Co/cos-codex-bridge?include_prereleases&label=release)](https://github.com/AV-Labs-Co/cos-codex-bridge/releases)
-[![npm stable](https://img.shields.io/npm/v/cos-codex-bridge?label=npm%20stable)](https://www.npmjs.com/package/cos-codex-bridge)
-[![License: MIT](https://img.shields.io/badge/license-MIT-gold.svg)](LICENSE)
-[![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-43853d.svg)](https://nodejs.org/)
-[![CoS Codex Bridge MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/AV-Labs-Co/cos-codex-bridge/badges/score.svg)](https://glama.ai/mcp/servers/AV-Labs-Co/cos-codex-bridge)
+This tree is a clean rewrite of the MCP server from [cos-codex-bridge](https://github.com/AV-Labs-Co/cos-codex-bridge) by Aninvieve Labs (AV-Labs-Co). The original MIT license is unchanged. See [NOTICE](NOTICE) for what was reused.
 
-A local MCP server that lets a Chief of Staff client find Codex tasks, create project work, deliver whole prompts, follow progress and continue the same conversation. An optional Claude Code CLI route in the same MCP does this with local project folders and saved CLI sessions. Free MIT core. No bridge subscription or checkout. Your existing Codex or Claude Code access is required for real execution.
+**The real end-to-end session on the Mac Mini has not been run.** CI uses a fake Codex binary. [How to run the Mac test, and the output that counts as success](docs/USAGE.md#real-mac-end-to-end-test).
 
-**Choose your release:** [`0.1.4` on npm](https://www.npmjs.com/package/cos-codex-bridge/v/0.1.4) is the stable Codex-only route (`@latest`). [`0.2.0-beta.1`](https://www.npmjs.com/package/cos-codex-bridge/v/0.2.0-beta.1) adds Claude Code CLI support (`@beta`) in the same MCP. Install locally, connect your client, then use the `bridge_*` tools. No daemon or Desktop-owner adapter installation is required. The Codex core workflow and the Grok Bot → Claude Code CLI handoff have passed owner field testing on macOS. Desktop-owned paused-queue recovery remains a known Codex limitation. Sidebar rendering on newer Codex Desktop versions is not certified; check the compatibility table before relying on it. A queued receipt is never proof that work started.
+## Résumé
 
-The bridge is indexed in the [official MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.AV-Labs-Co%2Fcos-codex-bridge) and [Glama](https://glama.ai/mcp/servers/AV-Labs-Co/cos-codex-bridge). These are discovery listings; the bridge still installs and runs locally.
+Pont MCP local entre Grok Bot et le CLI Codex. Un outil lance une tâche dans un worktree Git, un autre reprend le même fil Codex, les journaux restent paginés, et les tests du projet peuvent relancer Codex dans une limite de 3 essais et d'un temps maximum. La connexion prévue est l'abonnement ChatGPT (`codex login`), pas une clé d'API. Si Codex signale un plafond d'usage, le statut devient `rate_limited` et la boucle s'arrête. L'accès en écriture est refusé tant que le dépôt n'est pas dans une liste explicite. Rien n'est publié ni déployé. Les tests automatiques utilisent un faux binaire Codex. L'essai réel sur le Mac reste à faire.
 
-## What your Chief of Staff can do
-
-- Turn research or a product idea into a new Codex project and task.
-- Send the complete prompt and attached text without manual copying and pasting.
-- Find an existing Codex task, read its progress and continue the same conversation.
-- Track delivery with durable receipts instead of assuming an accepted prompt ran.
-- Rename, assign, pin and cancel scoped work across approved projects.
-- Keep local project access inside explicit allowlisted directories.
-
-Example: “Create a project for this idea, send my research to Codex, monitor the build, and follow up in the same task with the review findings.”
-
-### Claude Code route (beta)
-
-The same MCP can now start and continue **Claude Code CLI** work. Pass `provider:"claude-code"` to `bridge_projects`, `bridge_sessions` and `bridge_submit`; the existing Codex route remains the default. A local folder is the Claude Code project context. The bridge creates a saved CLI session there, returns a durable receipt, reads its result and follows up in the same session. This was locally tested with Claude Code 2.1.269, including a real file edit in a disposable folder.
-
-In an owner field test, the Grok Bot Chief of Staff used the installed MCP to create an allowlisted folder, send a prompt to Claude Code, read its completion, and follow up in the **same saved session**. Both bridge receipts and Claude Code's native session history were checked. This proves the local CLI handoff, not Claude Desktop or account Project control.
-
-Claude account Projects, ordinary chats, Cowork/Dispatch and Desktop-owned sessions are separate surfaces. This route does not create or control them, and a CLI session does not automatically appear in Claude Desktop's sidebar. [Claude setup, exact workflow and limits](docs/CLAUDE.md).
-
-### See the handoff
-
-<p align="center">
-  <img src="docs/assets/cos-codex-bridge-demo.webp" width="360" alt="Animated illustration of a Grok Bot Chief of Staff sending work through CoS Codex Bridge to Codex">
-</p>
-
-The animation illustrates the local handoff. It uses no private Desktop data or
-project screenshots.
-
-## Try the safe demo
-
-**New here? [Start with the no-account quickstart](docs/QUICKSTART.md).** It uses the stable npm package, needs no Git clone, and shows what a completed receipt looks like. [Report your install result](https://github.com/AV-Labs-Co/cos-codex-bridge/issues/new?template=installation.yml), including which local MCP client you use.
-
-This exercises the MCP workflow locally without a Codex account, model call or project changes:
-
-This clone uses GitHub `main`, currently the Claude Code CLI preview (`0.2.0-beta.1`). To demo the stable Codex-only source instead, run `git checkout v0.1.4` after `cd cos-codex-bridge` and before `npm ci`.
-
-```sh
-git clone https://github.com/AV-Labs-Co/cos-codex-bridge.git
-cd cos-codex-bridge
-npm ci
-npm run demo
-```
-
-The demo prints a completed receipt, payload hash and task metadata so you can see the bridge contract before granting access to a real project.
-
-## Easiest setup: give this link to your local assistant
-
-[Open the repository and installation instructions](https://github.com/AV-Labs-Co/cos-codex-bridge#install). An assistant with local terminal access can install it for you. A browser-only or cloud-only chat cannot install software on your computer.
-
-Copy this installation request to your Chief of Staff:
-
-> Install CoS Codex Bridge from https://github.com/AV-Labs-Co/cos-codex-bridge. Read the README and SECURITY.md first. Use only a project folder I approve, keep read-only defaults, and preserve existing client configuration. Follow the installer instructions, run doctor, and connect the generated stdio MCP entry to my local client. Tell me what passed and what still needs setup. Wait for my first task before submitting any work. Do not publish or deploy anything.
-
-You can also download the source archive from [Releases](https://github.com/AV-Labs-Co/cos-codex-bridge/releases), extract it and follow the steps below. Git cloning makes later updates easier. A [public npm package](https://www.npmjs.com/package/cos-codex-bridge) is available, but no hosted endpoint is required.
-
-## Install
-
-Requires Node.js 22+, npm, a locally authenticated Codex CLI for Codex work and/or Claude Code CLI for Claude work, and a local client supporting stdio MCP. Codex Desktop registration additionally requires Codex Desktop on macOS.
-
-The Git clone below installs the current `main` branch, which is the Claude Code CLI preview (`0.2.0-beta.1`). For the stable Codex-only source, run `git checkout v0.1.4` immediately after `cd cos-codex-bridge`, before `npm ci`. The pinned npm `@0.1.4` command below is the stable package route.
-
-```sh
-git clone https://github.com/AV-Labs-Co/cos-codex-bridge.git
-cd cos-codex-bridge
-npm ci
-npm test
-node scripts/install.mjs --root /absolute/path/to/your/projects
-```
-
-The installer writes a private config, launcher and MCP snippet under `~/.local/share/cos-codex-bridge`. Keep the checkout in place. Default execution is read-only; use `--write` only for approved project edits. Choose specific project roots, never your entire home directory. Add `--codex /absolute/path/to/codex` or `--claude /absolute/path/to/claude` if either CLI is not on the MCP client's PATH. See [installer and upgrade steps](INSTALLER.md).
-
-If you prefer npm to Git, install a pinned release into a dedicated folder, then run its same local installer. Use `@0.1.4` for stable Codex only or `@0.2.0-beta.1` for Codex plus the Claude Code CLI preview:
-
-```sh
-mkdir -p "$HOME/.local/share/cos-codex-bridge-package"
-npm install --prefix "$HOME/.local/share/cos-codex-bridge-package" cos-codex-bridge@0.1.4
-node "$HOME/.local/share/cos-codex-bridge-package/node_modules/cos-codex-bridge/scripts/install.mjs" --root "/absolute/path/to/your/projects"
-```
-
-Keep that package folder: the generated launcher points to it. The npm path was checked with clean stable and beta installs, isolated demo configs and `doctor`. The installer does not edit any MCP client settings for you.
-
-```sh
-~/.local/share/cos-codex-bridge/cos-codex-bridge doctor
-```
-
-Check `codexAvailable`, `claudeCodeAvailable`, `claudeCodeAuthenticated`, `mode`, `sandbox` and `roots`. The Claude sign-in check is made from the MCP host's process and may differ from a sandboxed terminal; doctor does not verify Desktop sidebar rendering. For a model-free demo, install into a separate prefix with `--demo`.
-
-Paste the generated `mcp-client.json` into your client's MCP configuration. Equivalent shape:
-
-```json
-{"mcpServers":{"cos-codex-bridge":{"command":"/absolute/path/to/node","args":["/absolute/path/to/cos-codex-bridge/dist/cli.js","--config","/absolute/path/to/config.json","mcp"]}}}
-```
-
-## A complete handoff
-
-Tell your Chief of Staff: “Find my app project, send this entire implementation brief to Codex, monitor it, then continue that same task with the review findings.”
-
-1. Resolve the exact project and task with `bridge_projects` and `bridge_sessions`.
-2. Create a directory if needed, then **register** it. A directory alone is not a Desktop project.
-3. Call `bridge_submit` with `project`, the whole `prompt`, and a stable `requestId`. Include `threadId` for follow-ups.
-4. Poll `bridge_receipt`. Verify hashes, task ID and eventual completion. Handle clarification with `bridge_answer`.
-5. Use `bridge_session_manage` to rename, assign or pin the task. Stored metadata and visible Desktop rendering are separate proofs.
-
-A successful model completion does not independently prove that generated code works. Review and test the result.
-
-## Ten tools, twelve features and one known limitation
+## Tools
 
 | Tool | Purpose |
 |---|---|
-| `bridge_projects` | List aliases, create a folder, register/open or inspect a Desktop project |
-| `bridge_sessions` | Find and read existing allowed tasks, including externally created tasks |
-| `bridge_submit` | Start or follow up; stable request IDs and complete UTF-8 payloads |
-| `bridge_receipt` | Durable progress, hashes, bounded output and explicit uncertainty |
-| `bridge_steer` | Retry recovery of an existing bridge queue item, without resending it |
-| `bridge_answer` | Answer pending clarification; never approve permission expansion |
-| `bridge_cancel` | Request cancellation of bridge-owned direct work |
-| `bridge_artifact` | Read/write versioned text artifacts without overwrite |
-| `bridge_session_manage` | Rename, pin/unpin and assign to a registered project |
-| `bridge_doctor` | Report mode, Codex version, scope and honest capability limits |
+| `bridge_doctor` | Codex binary, version, auth mode without secrets, Node, roots, limits |
+| `bridge_projects` | List or inspect allowlisted repositories |
+| `bridge_launch` | Start a task in a new worktree and branch |
+| `bridge_resume` | Follow up on the same Codex thread |
+| `bridge_redirect` | Interrupt the running turn, then send a new instruction |
+| `bridge_status` | One task, or a page of recent tasks |
+| `bridge_log` | Redacted events and stderr, by cursor |
+| `bridge_cancel` | Stop the Codex process. Does not delete the worktree |
+| `bridge_autofix` | Re-run tests and ask Codex to fix failures, within the caps |
+| `bridge_test` | Run the configured test command once |
+| `bridge_memory` | Read or update local project notes |
+| `bridge_report` | Diff stat, commits, tests, attempts, errors |
+| `bridge_cleanup` | Remove the task worktree and branch. Requires the approval token |
 
+`bridge_launch` returns as soon as the task is queued. Poll `bridge_status`. A `completed` status means the Codex turn finished and, when tests were enabled, the test command exited 0. It does not mean the change was reviewed.
 
-Known limitation (uncommon):
-If a session already has an active writer and a steering prompt is sent, the prompt waits for a natural pause/stopping point. On a long autonomous run, the only human intervention needed is pressing Steer in that case.
+## Codex interface
 
-See the [v1 capability contract](docs/FEATURES.md) and [verification matrix](docs/VERIFICATION.md).
+The bridge uses `codex exec --json` and `codex exec resume <thread_id>`. That is the documented non-interactive CLI. Details and the flags that are rejected are in [docs/CODEX-DRIVER.md](docs/CODEX-DRIVER.md).
 
-## Busy tasks, steering and interruption recovery
+Default sandbox is `read-only`. `workspace-write` works only for a repository inside `writeRoots`. The bridge does not pass `--dangerously-bypass-approvals-and-sandbox`, `--yolo`, `--full-auto`, or `danger-full-access`.
 
-Direct submission defaults to `SESSION_BUSY` when another writer owns the task. To opt into the existing Desktop execution policy, use `onBusy:"queue"` and `acceptDesktopPolicy:true`. `delivery:"desktop-queue"` explicitly queues to an existing task. These paths use Codex's first-party queue API, the equivalent of `codex queue`, and preserve separate text inputs and stable client message IDs.
+## Plan limits
 
-Receipts distinguish `busy`, `queued`, `steered`, `delivered`, `completed`, `blocked` and `uncertain`. `thread/queue/start` recovery has passed a local live test with the writer available. **Desktop-owned paused recovery is deferred for v0.1; it may require a human Steer click.** `bridge_steer` retries the exact saved item when the writer is available, including an existing CLI-created item adopted by its queue ID. `bridge_sessions` with `includeQueue:true` exposes pending IDs and inferred needs-steer state. It never silently forks or treats queue disappearance as delivery. See [queue semantics](docs/QUEUE.md).
+Defaults, also enforced as caps the caller cannot raise:
 
-## Security defaults
+- `maxConcurrentTasks`: 2
+- auto-fix `maxAttempts`: 3 per user-initiated run, including the first turn
+- auto-fix `maxWallTimeSeconds`: 1200
+- per-attempt timeout: 600 seconds
 
-**Source preview, not in npm 0.1.4 or 0.2.0-beta.1:** direct submissions now accept per-handoff `writeIntent`. A read-only handoff narrows a write-enabled configuration; a write handoff cannot expand configured authority. Desktop queue rejects explicit per-handoff intent because its existing permissions cannot be narrowed by this route. [Contract and examples](docs/HANDOFF-PERMISSIONS.md).
+Usage-limit and rate-limit errors become status `rate_limited`. The auto-fix loop does not try again. Wait for the plan window, then call `bridge_resume` if you still want another turn.
 
-Default-deny realpath allowlists, read-only direct execution, private local receipts, bounded UTF-8 input, explicit project/task matching and no implicit cloud endpoint. Prompts and artifacts are stored locally in plaintext for receipt integrity; do not treat them as encrypted storage.
+## Install
 
-Direct workers disable inherited connectors and deny permission approvals. Desktop queue is a separate, explicit policy boundary: it uses the existing task's permissions and tools. The bridge cannot enforce a narrower sandbox inside that already-running task. No automatic store submission, social posting or publication is authorized. See [SECURITY.md](SECURITY.md).
+Node.js 22+, a Codex CLI signed in with ChatGPT, and a stdio MCP client. macOS steps, including the Grok Bot config, are in [INSTALLER.md](INSTALLER.md).
 
-## Client matrix
+```sh
+npm ci
+npm test
+node scripts/install.mjs --root /absolute/parent/of/your/repos
+```
 
-| Environment | Evidence |
-|---|---|
-| Grok Bot / CoS on owner's Mac | Codex orchestration and a Claude Code CLI create → complete → same-session follow-up field-tested; installation-specific integration |
-| Standard stdio MCP client | Protocol handshake, schemas, errors, installer and demo tested automatically on macOS and Ubuntu |
-| Codex Desktop macOS / CLI 0.153.4 | Owner-tested registration, assignment, pinning, continuity and queue delivery |
-| Codex Desktop 0.155.0-alpha.9.2 | Native metadata observed in field; sidebar rendering not certified; legacy adapter disabled |
-| Other MCP clients | Expected protocol compatibility; not individually field-certified |
-| Claude Code CLI 2.1.269 | Local create, complete, read and same-session follow-up verified; restricted file write verified in a disposable folder |
-| Claude Desktop/Claude account Projects | No creation, sidebar registration, pinning or live-session control claim; saved local transcript may be readable but not resumable through this route |
-| Windows runtime / Linux Desktop integration | Not verified; no macOS Desktop parity claim |
-| Ordinary ChatGPT chats | Not supported |
-| Hosted service / Composio cloud | Not provided or listed |
+Generated MCP entry:
 
-Native project assignment is supported through the installed experimental App Server API. An optional, version-gated legacy Desktop assignment adapter has backup and race checks; it is off by default and remains experimental.
+```json
+{
+  "mcpServers": {
+    "grokbot-codex-bridge": {
+      "command": "/absolute/path/to/node",
+      "args": ["/absolute/path/to/dist/cli.js", "--config", "/absolute/path/to/config.json", "mcp"],
+      "env": {}
+    }
+  }
+}
+```
 
-## Community
+A model-free demo, using the fake Codex binary:
 
-This project focuses on reliable Chief of Staff handoffs rather than a universal superiority claim. Other Codex MCP projects solve useful adjacent workflows. We do not claim “most advanced,” all-account control or blanket autonomy.
+```sh
+npm test
+npm run demo
+```
 
-[Ask an installation question or share a client recipe in GitHub Discussions](https://github.com/AV-Labs-Co/cos-codex-bridge/discussions). Use Issues for reproducible bugs, with **redacted** version, state and error details. Never post full private prompts or credentials.
+The demo prints a completed receipt, a thread id, and `codex: "fake"`.
 
-Star it to follow development and fork it for your client. [MIT License](LICENSE).
+## Walkthrough
+
+Launch, monitor, auto-fix, resume, and the final report are written out with the JSON arguments in [docs/USAGE.md](docs/USAGE.md).
+
+## Security
+
+Allowlists use realpath and reject `/` and the home directory. State lives in `~/.local/share/grokbot-codex-bridge` with mode 0700. Receipts are 0600. Each task gets its own git worktree and `bridge/<id>` branch. Cleanup, and only cleanup, requires `approvalToken` from the private config. There is no push, deploy, or registry publish. The package is marked private and the publish workflow exits 1. See [SECURITY.md](SECURITY.md).
+
+## Tests
+
+`npm test` builds and runs unit plus integration tests on Node 22. They cover launch, log retrieval, session resume, auto-fix of a failing test, attempt caps, rate-limit stop, needs-input stop, cancel, worktree isolation, approval-token cleanup, secret redaction, bridge restart with a live process and with a dead process, and an MCP handshake over stdio. CI runs those tests on Linux and macOS. None of them contact Codex or OpenAI.
+
+## License
+
+MIT. Copyright (c) 2026 Aninvieve Labs, plus fork modifications under the same license. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

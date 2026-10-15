@@ -1,59 +1,155 @@
-import { readFile, realpath, stat, lstat, mkdir } from 'node:fs/promises';
-import path from 'node:path';
+import { chmod, lstat, mkdir, readFile, realpath, stat } from 'node:fs/promises';
 import os from 'node:os';
+import path from 'node:path';
 import { z } from 'zod';
-export const MAX_PROMPT = 256 * 1024;
-export const MAX_ARTIFACT = 1024 * 1024;
-export class BridgeError extends Error {
-  constructor(public code: string, message: string) { super(message); }
-}
-export const ConfigSchema = z.object({
-  version: z.literal(1), mode: z.enum(['codex','demo']).default('codex'),
-  roots: z.array(z.string()).min(1).max(20),
-  projects: z.record(z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/),z.string()).default({}),
-  sandbox: z.enum(['read-only','workspace-write']).default('read-only'),
-  codexBinary: z.string().default('codex'), claudeBinary:z.string().default('claude'), claudeConfigDir:z.string().optional(), model: z.string().optional(), claudeModel:z.string().optional(),
-  desktopLegacyAssignment:z.boolean().default(false),
-  stateDir: z.string().optional(), maxConcurrent: z.number().int().min(1).max(8).default(2),
-  jobTimeoutSeconds: z.number().int().min(30).max(7200).default(1800)
+import { BridgeError } from './errors.js';
+
+const aliasPattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+const branchPattern = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,80}$/;
+
+const ProjectSchema = z.object({
+  path: z.string(),
+  testCommand: z.string().min(1).max(400).optional(),
+  baseBranch: z.string().regex(branchPattern).optional(),
 }).strict();
-export type Config = z.infer<typeof ConfigSchema> & { configPath: string; stateDir: string };
+
+export const ConfigSchema = z.object({
+  version: z.literal(1),
+  roots: z.array(z.string()).min(1).max(20),
+  writeRoots: z.array(z.string()).max(20).default([]),
+  projects: z.record(z.string().regex(aliasPattern), ProjectSchema).default({}),
+  codexBinary: z.string().min(1).default('codex'),
+  model: z.string().regex(/^[A-Za-z0-9._:-]{1,64}$/).optional(),
+  maxConcurrentTasks: z.number().int().min(1).max(4).default(2),
+  autoFix: z.object({
+    maxAttempts: z.number().int().min(1).max(5).default(3),
+    maxWallTimeSeconds: z.number().int().min(30).max(7200).default(1200),
+  }).strict().default({ maxAttempts: 3, maxWallTimeSeconds: 1200 }),
+  attemptTimeoutSeconds: z.number().int().min(15).max(3600).default(600),
+  testTimeoutSeconds: z.number().int().min(5).max(1800).default(180),
+  approvalToken: z.string().min(8).max(200).optional(),
+  stateDir: z.string().optional(),
+}).strict();
+
+export interface ProjectConfig {
+  alias: string;
+  path: string;
+  testCommand?: string;
+  baseBranch?: string;
+}
+
+export interface Config {
+  version: 1;
+  roots: string[];
+  writeRoots: string[];
+  projects: Record<string, ProjectConfig>;
+  codexBinary: string;
+  model?: string;
+  maxConcurrentTasks: number;
+  autoFix: { maxAttempts: number; maxWallTimeSeconds: number };
+  attemptTimeoutSeconds: number;
+  testTimeoutSeconds: number;
+  approvalToken?: string;
+  stateDir: string;
+  configPath: string;
+}
+
+export function inside(root: string, target: string): boolean {
+  const rel = path.relative(root, target);
+  return rel === '' || (!rel.startsWith(`..${path.sep}`) && rel !== '..' && !path.isAbsolute(rel));
+}
+
+async function privateDir(dir: string): Promise<string> {
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  const info = await lstat(dir);
+  if (info.isSymbolicLink() || !info.isDirectory()) throw new BridgeError('CONFIG', 'State directory must be a real directory, not a symlink.');
+  await chmod(dir, 0o700);
+  return realpath(dir);
+}
+
 export async function loadConfig(file: string): Promise<Config> {
-  const configPath=await realpath(file);
-  const raw=ConfigSchema.parse(JSON.parse(await readFile(configPath,'utf8')));
-  if(raw.claudeConfigDir&&!path.isAbsolute(raw.claudeConfigDir))throw new BridgeError('CONFIG','claudeConfigDir must be an absolute path.');
-  const roots=await Promise.all(raw.roots.map(async p=>{
-    if(!path.isAbsolute(p))throw new BridgeError('CONFIG','Roots must be absolute.');
-    const r=await realpath(p);
-    if(r===path.parse(r).root || r===os.homedir())throw new BridgeError('CONFIG','Allow individual project parents, not / or your home directory.');
-    if(!(await stat(r)).isDirectory())throw new BridgeError('CONFIG','Root is not a directory.');
-    return r;
-  }));
-  const stateDir=raw.stateDir??path.join(os.homedir(),'.local','state','cos-codex-bridge');
-  if(!path.isAbsolute(stateDir))throw new BridgeError('CONFIG','stateDir must be absolute.');
-  await mkdir(stateDir,{recursive:true,mode:0o700});
-  const state=await lstat(stateDir);
-  if(state.isSymbolicLink() || !state.isDirectory() || (state.mode & 0o077)!==0)throw new BridgeError('CONFIG','State directory must be a private, non-symlink directory (chmod 700).');
-  const canonicalState=await realpath(stateDir);
-  if(roots.some(r=>inside(r,canonicalState)||inside(canonicalState,r)||inside(r,configPath)))throw new BridgeError('CONFIG','Keep configuration and state outside allowed project roots.');
-  return {...raw,roots,configPath,stateDir:canonicalState};
+  const configPath = await realpath(file);
+  let parsed: z.infer<typeof ConfigSchema>;
+  try {
+    parsed = ConfigSchema.parse(JSON.parse(await readFile(configPath, 'utf8')));
+  } catch (error) {
+    if (error instanceof BridgeError) throw error;
+    throw new BridgeError('CONFIG', 'Configuration is missing or does not match the expected schema.');
+  }
+  const roots = await Promise.all(parsed.roots.map((entry) => canonicalizeRoot(entry)));
+  const writeRoots: string[] = [];
+  for (const entry of parsed.writeRoots) {
+    const resolved = await canonicalizeRoot(entry);
+    if (!roots.some((root) => inside(root, resolved))) {
+      throw new BridgeError('CONFIG', 'Every write root must be inside a configured read root.');
+    }
+    writeRoots.push(resolved);
+  }
+  const stateDir = await privateDir(parsed.stateDir ?? path.join(os.homedir(), '.local', 'share', 'grokbot-codex-bridge'));
+  if (!path.isAbsolute(stateDir)) throw new BridgeError('CONFIG', 'stateDir must be absolute.');
+  if (roots.some((root) => inside(root, stateDir) || inside(stateDir, root) || inside(root, configPath))) {
+    throw new BridgeError('CONFIG', 'Keep configuration and state outside allowlisted project roots.');
+  }
+  const projects: Record<string, ProjectConfig> = {};
+  for (const [alias, project] of Object.entries(parsed.projects)) {
+    const projectPath = await resolveExisting(project.path);
+    if (!roots.some((root) => inside(root, projectPath))) throw new BridgeError('CONFIG', `Project ${alias} is outside the allowlisted roots.`);
+    projects[alias] = {
+      alias,
+      path: projectPath,
+      ...(project.testCommand ? { testCommand: project.testCommand } : {}),
+      ...(project.baseBranch ? { baseBranch: project.baseBranch } : {}),
+    };
+  }
+  return {
+    version: 1,
+    roots,
+    writeRoots,
+    projects,
+    codexBinary: parsed.codexBinary,
+    ...(parsed.model ? { model: parsed.model } : {}),
+    maxConcurrentTasks: parsed.maxConcurrentTasks,
+    autoFix: parsed.autoFix,
+    attemptTimeoutSeconds: parsed.attemptTimeoutSeconds,
+    testTimeoutSeconds: parsed.testTimeoutSeconds,
+    ...(parsed.approvalToken ? { approvalToken: parsed.approvalToken } : {}),
+    stateDir,
+    configPath,
+  };
 }
-export function inside(root:string,target:string):boolean {
-  const rel=path.relative(root,target);
-  return rel==='' || (!rel.startsWith(`..${path.sep}`)&&rel!=='..'&&!path.isAbsolute(rel));
-}
-export async function scoped(config:Config,input:string,directory=true):Promise<string> {
-  if(!path.isAbsolute(input))throw new BridgeError('OUTSIDE_ALLOWLIST','Use an absolute path or configured project alias.');
-  const resolved=await realpath(input).catch(()=>{throw new BridgeError('NOT_FOUND','Path does not exist.');});
-  if(!config.roots.some(r=>inside(r,resolved)))throw new BridgeError('OUTSIDE_ALLOWLIST','Path is outside configured workspace roots.');
-  const s=await stat(resolved);
-  if(directory ? !s.isDirectory():!s.isFile())throw new BridgeError('INVALID_PATH',directory?'Expected a directory.':'Expected a regular file.');
+
+async function canonicalizeRoot(input: string): Promise<string> {
+  if (!path.isAbsolute(input)) throw new BridgeError('CONFIG', 'Roots must be absolute paths.');
+  const resolved = await realpath(input);
+  if (resolved === path.parse(resolved).root || resolved === os.homedir()) {
+    throw new BridgeError('CONFIG', 'Allow individual project directories, not / or your home directory.');
+  }
+  const info = await stat(resolved);
+  if (!info.isDirectory()) throw new BridgeError('CONFIG', 'A configured root is not a directory.');
   return resolved;
 }
-export async function project(config:Config,name:string):Promise<string>{return scoped(config,config.projects[name]??name);}
-export function textLimit(text:string,max:number,label:string):number {
-  if(text!==Buffer.from(text,'utf8').toString('utf8'))throw new BridgeError('INVALID_TEXT',`${label} contains invalid Unicode.`);
-  const bytes=Buffer.byteLength(text);
-  if(!bytes||bytes>max)throw new BridgeError('SIZE_LIMIT',`${label} must contain 1–${max} UTF-8 bytes; received ${bytes}. Nothing was sent.`);
-  return bytes;
+
+export async function resolveExisting(input: string): Promise<string> {
+  if (!path.isAbsolute(input)) throw new BridgeError('OUTSIDE_ALLOWLIST', 'Use an absolute path or a configured project alias.');
+  try {
+    return await realpath(input);
+  } catch {
+    throw new BridgeError('NOT_FOUND', 'Path does not exist.');
+  }
+}
+
+export function canWrite(config: Config, directory: string): boolean {
+  return config.writeRoots.some((root) => inside(root, directory));
+}
+
+export async function resolveProject(config: Config, project: string): Promise<{ alias: string; path: string; testCommand?: string; baseBranch?: string }> {
+  const configured = config.projects[project];
+  if (configured) return configured;
+  const resolved = await resolveExisting(project);
+  if (!config.roots.some((root) => inside(root, resolved))) throw new BridgeError('OUTSIDE_ALLOWLIST', 'Path is outside configured workspace roots.');
+  const info = await stat(resolved);
+  if (!info.isDirectory()) throw new BridgeError('INVALID_PATH', 'Expected a directory.');
+  const match = Object.values(config.projects).find((item) => item.path === resolved);
+  if (match) return match;
+  return { alias: path.basename(resolved), path: resolved };
 }

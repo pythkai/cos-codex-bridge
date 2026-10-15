@@ -20,6 +20,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npm run demo
       - run: npm pack --dry-run
   test:
     name: test

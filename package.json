@@ -1,45 +1,29 @@
 {
-  "name": "cos-codex-bridge",
-  "version": "0.2.0-beta.1",
-  "description": "Local MCP for Chief of Staff agents to create, run, monitor and continue Codex projects and tasks.",
-  "author": "AV Labs",
+  "name": "grokbot-codex-bridge",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Local stdio MCP bridge that lets Grok Bot launch, resume, test and report Codex CLI tasks.",
   "type": "module",
   "license": "MIT",
-  "mcpName": "io.github.av-labs-co/cos-codex-bridge",
-  "keywords": [
-    "mcp",
-    "model-context-protocol",
-    "codex",
-    "openai-codex",
-    "claude-code",
-    "grok-bot",
-    "ai-agent",
-    "chief-of-staff",
-    "automation",
-    "local-first"
-  ],
   "engines": {
     "node": ">=22.0.0"
   },
   "bin": {
-    "cos-codex-bridge": "dist/cli.js"
+    "grokbot-codex-bridge": "dist/cli.js"
   },
   "files": [
     "dist",
     "scripts/install.mjs",
     "scripts/Install.command",
+    "scripts/demo.mjs",
+    "scripts/e2e-mac.mjs",
     "README.md",
     "SECURITY.md",
     "INSTALLER.md",
+    "NOTICE",
     "LICENSE",
-    "scripts/demo.mjs",
-    "docs/FEATURES.md",
-    "docs/VERIFICATION.md",
-    "docs/QUEUE.md",
-    "docs/CLAUDE.md",
-    "docs/SECURITY-REVIEW.md",
-    "server.json",
-    "docs/HANDOFF-PERMISSIONS.md"
+    "docs/USAGE.md",
+    "docs/CODEX-DRIVER.md"
   ],
   "scripts": {
     "build": "tsc",
@@ -47,7 +31,7 @@
     "check": "tsc --noEmit",
     "start": "node dist/cli.js",
     "demo": "node scripts/demo.mjs",
-    "prepack": "npm run build"
+    "e2e:mac": "node scripts/e2e-mac.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.31.0",
@@ -56,16 +40,5 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "7.0.2"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/AV-Labs-Co/cos-codex-bridge.git"
-  },
-  "homepage": "https://github.com/AV-Labs-Co/cos-codex-bridge#readme",
-  "bugs": {
-    "url": "https://github.com/AV-Labs-Co/cos-codex-bridge/issues"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }
